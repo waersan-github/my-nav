@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统后台 // Admin Console</title>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --panel-bg: rgba(22, 33, 46, 0.85);
+            --text-main: #fcfcfc;
+            --text-muted: #8a99a8;
+            --border-active: #30363d;
+            --hover-glow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+        body { background: #0d1117; color: var(--text-main); min-height: 100vh; padding: 40px 20px; overflow-x: hidden; }
+        
+        /* 弹窗遮罩层 */
+        #loginModal { 
+            position: fixed; 
+            top: 0; left: 0; width: 100vw; height: 100vh; 
+            background: rgba(13, 17, 23, 0.9); /* 半透明背景 */
+            backdrop-filter: blur(5px); /* 毛玻璃效果 */
+            z-index: 999; 
+            display: flex; 
+            align-items: center; justify-content: center; 
+        }
+        /* 弹窗主体 */
+        .login-box { 
+            background: var(--panel-bg); 
+            padding: 40px; 
+            border-radius: 12px; 
+            border: 1px solid var(--border-active); 
+            text-align: center; 
+            width: 100%; max-width: 380px; 
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); 
+            animation: popIn 0.3s ease-out; /* 简单的弹出动画 */
+        }
+        @keyframes popIn {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .login-box h2 { margin-bottom: 25px; color: #0284c7; letter-spacing: 1px; font-size: 1.5rem; }
+        .login-box input { 
+            width: 100%; padding: 14px 15px; margin-bottom: 20px; 
+            background: rgba(1, 4, 9, 0.8); border: 1px solid var(--border-active); 
+            color: white; border-radius: 6px; outline: none; font-size: 1rem;
+        }
+        .login-box input:focus { border-color: #0284c7; }
+        .login-box button { 
+            width: 100%; padding: 14px; background: #0284c7; color: white; 
+            border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; 
+            font-weight: bold; transition: background 0.2s; 
+        }
+        .login-box button:hover { background: #0369a1; }
+        
+        /* 管理面板样式 */
+        #adminPanel { display: none; max-width: 1100px; margin: 0 auto; filter: blur(0px); transition: filter 0.3s; }
+        .blur-bg { filter: blur(8px) !important; pointer-events: none; } /* 未登录时背景模糊 */
+
+        header { text-align: center; margin-bottom: 40px; border-bottom: 1px solid var(--border-active); padding-bottom: 20px; }
+        header h1 { font-size: 1.8rem; color: #f85149; margin-bottom: 15px; }
+        .control-panel { display: flex; justify-content: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+        .cyber-btn { background: rgba(255, 255, 255, 0.05); color: #c9d1d9; border: 1px solid rgba(255, 255, 255, 0.1); padding: 8px 16px; cursor: pointer; font-weight: 500; font-size: 0.9rem; border-radius: 6px; transition: all 0.2s; }
+        .cyber-btn:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; border-color: rgba(255, 255, 255, 0.3); }
+        
+        .category { margin-bottom: 30px; border: 1px dashed var(--border-active); padding: 20px; background: rgba(22, 33, 46, 0.5); border-radius: 10px; }
+        .cat-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 10px; }
+        .category-title { font-size: 1.1rem; color: #e6edf3; font-weight: 600; }
+        .bookmark-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+        .bookmark-card { background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-active); padding: 12px; display: flex; align-items: center; justify-content: space-between; color: var(--text-main); border-radius: 6px; }
+        .card-content { display: flex; align-items: center; gap: 10px; overflow: hidden; }
+        .card-content span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.9rem; }
+        .delete-btn { color: #f85149; background: rgba(248, 81, 73, 0.1); border: 1px solid rgba(248, 81, 73, 0.3); border-radius: 4px; cursor: pointer; padding: 2px 8px; font-weight: bold; transition: all 0.2s; }
+        .delete-btn:hover { background: #f85149; color: white; }
+    </style>
+</head>
+<body>
+
+    <!-- 管理控制台主界面 (底层) -->
+    <div id="adminPanel" class="blur-bg">
+        <header>
+            <h1>⚠️ 后台数据管理中心</h1>
+            <div class="control-panel">
+                <button class="cyber-btn" onclick="addCategory()">+ 新增分类</button>
+                <button class="cyber-btn" onclick="logout()">退出登录</button>
+                <a href="/" class="cyber-btn" style="text-decoration: none;">返回前台</a>
+            </div>
+        </header>
+        <main id="mainContent"></main>
+    </div>
+
+    <!-- 独立悬浮弹窗登录层 (顶层) -->
+    <div id="loginModal">
+        <div class="login-box">
+            <h2>身份验证</h2>
+            <input type="text" id="adminUser" placeholder="请输入账号..." autocomplete="off">
+            <input type="password" id="adminPwd" placeholder="请输入密码..." autocomplete="off">
+            <button onclick="handleLogin()">授权登入</button>
+        </div>
+    </div>
+
+    <script>
+        let navData = [];
+
+        // 验证登录状态并切换视图
+        function checkAuth() {
+            if (sessionStorage.getItem('nav_token')) {
+                // 隐藏登录弹窗
+                document.getElementById('loginModal').style.display = 'none';
+                // 显示后台内容并移除模糊效果
+                const adminPanel = document.getElementById('adminPanel');
+                adminPanel.style.display = 'block';
+                adminPanel.classList.remove('blur-bg');
+                // 获取数据
+                fetchBookmarks();
+            } else {
+                // 如果未登录，确保后台背景显示但处于模糊状态
+                document.getElementById('adminPanel').style.display = 'block';
+            }
+        }
+
+        // 处理登录点击
+        function handleLogin() {
+            const user = document.getElementById('adminUser').value.trim();
+            const pwd = document.getElementById('adminPwd').value.trim();
+
+            // 简易的前端账号校验 (你可以把 admin 换成你想要的任意账号名)
+            if (user !== 'admin') {
+                alert("账号不存在！");
+                return;
+            }
+
+            if (!pwd) {
+                alert("请输入密码！");
+                return;
+            }
+
+            // 账号正确，暂存密码并尝试渲染页面 (密码真实性将在保存时由后端严格校验)
+            sessionStorage.setItem('nav_token', pwd);
+            checkAuth();
+        }
+
+        // 登出
+        function logout() {
+            sessionStorage.removeItem('nav_token');
+            location.reload();
+        }
+
+        // 加载数据
+        async function fetchBookmarks() {
+            try {
+                const response = await fetch('/api/bookmarks');
+                const data = await response.json();
+                navData = Array.isArray(data) ? data : [];
+                render();
+            } catch (error) {
+                alert("拉取云端数据失败！");
+            }
+        }
+
+        // 核心提交保存操作
+        async function saveBookmarksToCloud() {
+            const pwd = sessionStorage.getItem('nav_token');
+            try {
+                const response = await fetch('/api/bookmarks', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${pwd}` },
+                    body: JSON.stringify(navData)
+                });
+                
+                if (response.ok) {
+                    return true;
+                } else {
+                    if (response.status === 401) {
+                        alert("密码验证失败！权限不足。");
+                        logout();
+                    } else {
+                        alert("服务器保存失败，请稍后再试。");
+                    }
+                    return false;
+                }
+            } catch (error) {
+                alert("网络错误，保存失败！");
+                return false;
+            }
+        }
+
+        // 渲染管理界面
+        function render() {
+            const main = document.getElementById('mainContent');
+            main.innerHTML = ''; 
+            navData.forEach(category => {
+                const section = document.createElement('section');
+                section.className = 'category';
+                section.innerHTML = `
+                    <div class="cat-header">
+                        <div class="category-title">📂 ${category.name}</div>
+                        <div>
+                            <button class="cyber-btn" style="padding: 4px 10px; font-size: 0.8rem;" onclick="addBookmark('${category.id}')">+ 添加链接</button>
+                            <button class="delete-btn" onclick="deleteCategory('${category.id}')">删除整个分类</button>
+                        </div>
+                    </div>
+                `;
+                const grid = document.createElement('div');
+                grid.className = 'bookmark-grid';
+                category.bookmarks.forEach(bm => {
+                    const card = document.createElement('div');
+                    card.className = 'bookmark-card';
+                    card.innerHTML = `
+                        <div class="card-content">
+                            <span>${bm.name}</span>
+                        </div>
+                        <button class="delete-btn" onclick="deleteBookmark('${category.id}', '${bm.id}')">删除</button>
+                    `;
+                    grid.appendChild(card);
+                });
+                section.appendChild(grid);
+                main.appendChild(section);
+            });
+        }
+
+        const genId = () => '_' + Math.random().toString(36).substr(2, 9);
+
+        // 管理员操作逻辑
+        async function addCategory() {
+            const name = prompt("请输入新分类名称:");
+            if (name && name.trim()) {
+                navData.push({ id: genId(), name: name.trim(), bookmarks: [] });
+                if (await saveBookmarksToCloud()) render();
+                else fetchBookmarks(); 
+            }
+        }
+
+        async function deleteCategory(catId) {
+            if (confirm("警告：确认删除该分类及其中所有书签吗？")) {
+                const oldData = [...navData];
+                navData = navData.filter(c => c.id !== catId);
+                if (await saveBookmarksToCloud()) render();
+                else { navData = oldData; render(); }
+            }
+        }
+
+        async function addBookmark(catId) {
+            const name = prompt("请输入网站名称:");
+            if (!name) return;
+            let url = prompt("请输入完整链接 (必须包含 http/https):");
+            if (!url) return;
+            if (!url.startsWith('http')) url = 'https://' + url;
+
+            const catIndex = navData.findIndex(c => c.id === catId);
+            if (catIndex > -1) {
+                navData[catIndex].bookmarks.push({ id: genId(), name: name.trim(), url: url.trim() });
+                if (await saveBookmarksToCloud()) render();
+                else fetchBookmarks();
+            }
+        }
+
+        async function deleteBookmark(catId, bmId) {
+            if (confirm("确认删除该书签？")) {
+                const catIndex = navData.findIndex(c => c.id === catId);
+                if (catIndex > -1) {
+                    navData[catIndex].bookmarks = navData[catIndex].bookmarks.filter(b => b.id !== bmId);
+                    if (await saveBookmarksToCloud()) render();
+                    else fetchBookmarks();
+                }
+            }
+        }
+
+        // 绑定回车登录事件
+        document.getElementById('adminUser').addEventListener('keypress', e => {
+            if (e.key === 'Enter') document.getElementById('adminPwd').focus();
+        });
+        document.getElementById('adminPwd').addEventListener('keypress', e => {
+            if (e.key === 'Enter') handleLogin();
+        });
+
+        // 初始化
+        checkAuth();
+    </script>
+</body>
+</html>
